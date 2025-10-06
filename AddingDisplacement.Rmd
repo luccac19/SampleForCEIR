@@ -1,0 +1,93 @@
+---
+title: "AddingDisplacement"
+author: "Lucca"
+date: "2025-08-14"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Code from Farrell et al. (2021) quantifies indigenous displacement in North America. I adapted this code to quantify displacement for tribes in this study, replacing the T2 centroids with a single point representing the current coordinates in the tribal directory.  
+```{r}
+
+library(tidyverse)
+library(geosphere)
+library(sf)
+tribalcharacteristics<-read_csv("FinalFinalAnalysisDataset2.csv")
+names(tribalcharacteristics)[135]<-"Lat"
+names(tribalcharacteristics)[136]<-"Lon"
+matchdyad<-read_csv("matchingextended.csv")
+tribesofinterest<-tribalcharacteristics%>%select(TribeFullName,Lat,Lon)
+tribesofinterest<-tribesofinterest[tribesofinterest$TribeFullName%in%matchdyad$tribes,]
+tribesofinterest<-left_join(tribesofinterest,matchdyad,join_by(TribeFullName==tribes))
+tribesofinterest <- st_as_sf(tribesofinterest, coords = c("Lat", "Lon"), crs = 4326)
+tribesofinterest$dyadtribename[3]<-"Plains Apache"
+
+# Calculate Centroids -----------------------------------------------------
+
+# Load data
+load("dyad_data.rda")
+
+# Calculate centroid points for T1
+t1_centroids <- t1_shp %>%
+  st_centroid() %>%
+  dplyr::select(tribe, time, geometry) %>%
+  rename(tribe_t1 = tribe) #%>% as.data.frame()
+
+#for T2, there will just be one point-- the coordinate point associated with the tribe in the tribal directory.
+
+# Calculate all pairwise combinations of points
+
+# Loop
+all_tribe_dyads <- list() # create empty list to fill
+for (i in seq_along(tribesofinterest$TribeFullName)) { 
+
+  df<-tribesofinterest[tribesofinterest$TribeFullName==tribesofinterest$TribeFullName[i],]
+  
+  # Filter points for single tribe
+  tribe_t1 <- filter(t1_centroids, tribe_t1%in%df$dyadtribename)
+  tribe_t2 <- df
+
+  # Calculate all possible dyads between T1 and T2
+  tribe_pairwise <- expand.grid(tribe_t1$geometry, tribe_t2$geometry) %>% 
+    as.data.frame() %>%
+    tidyr::extract(Var1, into = c("Lon1", "Lat1"), "\\((.*),(.*)\\)", conv = T) %>%
+    tidyr::extract(Var2, into = c('Lat2', 'Lon2'), '\\((.*),(.*)\\)', conv = T) %>%
+    unique() %>%
+    mutate(pair_dist_km = distHaversine(cbind(Lon1, Lat1), cbind(Lon2, Lat2)) / 1000) %>% # in kilometers
+    mutate(tribe = paste(tribesofinterest$TribeFullName[i]))
+  
+  # Save dataframe of all dyads for each tribe
+  all_tribe_dyads[[i]] <- tribe_pairwise 
+}
+
+# Convert list loop output to dataframe
+all_tribe_dyads_df <- do.call(rbind.data.frame, all_tribe_dyads)
+nrow(all_tribe_dyads_df)
+
+# Calculate summary statistics of dyads for each tribe
+tribe_dyad_summary <- all_tribe_dyads_df %>%
+  group_by(tribe) %>%
+  summarise(mean_dist_km = mean(pair_dist_km),
+            median_dist_km = median(pair_dist_km),
+            min_dist_km = min(pair_dist_km),
+            max_dist_km = max(pair_dist_km),
+            quantile_25 = quantile(pair_dist_km, c(0.25)),
+            quantile_75 = quantile(pair_dist_km, c(0.75)))
+
+# Calculate summary statistics across all tribes
+mean(tribe_dyad_summary$mean_dist_km) # average distance across all tribes
+median(tribe_dyad_summary$median_dist_km) # median distance across all tribes
+min(tribe_dyad_summary$min_dist_km) # minumum distance
+max(tribe_dyad_summary$max_dist_km) # maximum distance
+
+tribalcharacteristics<-left_join(tribalcharacteristics,tribe_dyad_summary,join_by(TribeFullName==tribe))
+
+write_csv(tribalcharacteristics,"FinalWithDisplacement.csv")
+write_csv(tribe_dyad_summary,"dyadsummary.csv")
+
+```
+
+
