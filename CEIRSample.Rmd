@@ -1,0 +1,49 @@
+---
+title: "CEIR Sample Code"
+author: "Lucca"
+date: "2025-10-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#library packages
+
+```{r}
+library(sandwich)
+library(lmtest)
+library(fixest)
+library(modelsummary)
+library(stargazer)
+```
+
+#read in election data and dyad summary by tribe, join both
+```{r}
+electionresults<-read_csv("CEIRsampleresults.csv")
+dyadsummary<-read_csv("dyadsummary.csv")
+electionresults<-left_join(electionresults,dyadsummary,join_by(tribe_name==tribe))
+electionresults$year<-factor(electionresults$year)
+
+```
+
+#model:  
+```{r}
+#median distance
+structuralmodel1<-lm(turnout~median_dist_km+twentyone+residency_requirement_binary+chair+uselection+election_type+selfgovernance+blood_quantum+city_time+doi_avg_per_year+doiselfdetermination_avg_per_year+factor(year),data=electionresults)
+#standard errors clustered by tribe
+cluster_structural1<-vcovCL(structuralmodel1, cluster = ~tribe_name)
+#min distance
+structuralmodel2<-lm(turnout~min_dist_km+twentyone+residency_requirement_binary+chair+uselection+election_type+selfgovernance+blood_quantum+city_time+doi_avg_per_year+doiselfdetermination_avg_per_year+factor(year),data=electionresults)
+cluster_structural2<-vcovCL(structuralmodel2, cluster = ~tribe_name)
+#max distance
+structuralmodel3<-lm(turnout~max_dist_km+twentyone+residency_requirement_binary+chair+uselection+election_type+selfgovernance+blood_quantum+city_time+doi_avg_per_year+doiselfdetermination_avg_per_year+factor(year),data=electionresults)
+cluster_structural3<-vcovCL(structuralmodel1, cluster = ~tribe_name)
+#table
+stargazer(
+  structuralmodel1,structuralmodel2,structuralmodel3,
+  se = list(sqrt(diag(cluster_structural1)),sqrt(diag(cluster_structural2)),sqrt(diag(cluster_structural3))),
+  omit=c("factor","Constant"),
+    type = "latex",out = "displacementtable.tex")
+```
