@@ -130,7 +130,7 @@ electionresults$chair[c(24,25,50,51,219,221,222)]<-1
 electionresults$`Election Date`<-mdy(electionresults$`Election Date`)
 electionresults$year<-year(electionresults$'Election Date')
 electionresults$month<-month(electionresults$'Election Date')
-electionresults$USelection<-ifelse((electionresults$month==11)&(electionresults$year%in%c(2016,2018,2020,2022,2024)),1,0)
+electionresults$uselection<-ifelse((electionresults$month==11)&(electionresults$year%in%c(2016,2018,2020,2022,2024)),1,0)
 
 electionresults<-electionresults%>%select("Tribe Name","Election Type",maxvotes,chair,year,month,USelection) 
 ```
