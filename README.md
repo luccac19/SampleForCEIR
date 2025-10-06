@@ -11,8 +11,8 @@ This repository contains selected code from my work on turnout in tribal electio
 
 4. [Displacement](./AddingDisplacement.Rmd) contains the code to calculate distances of displacement using data from Farrell et al. 2021.
 
-5. [Subheading 4](./file4.md)  
-   Brief description of what this file contains.
+5. [Analysis](./CEIRSample.Rmd)  
+   contains the code to create the analysis tables used in the write-up.
 
 6. [Subheading 5](./file5.md)  
    Brief description of what this file contains
