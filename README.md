@@ -7,7 +7,7 @@ This repository contains selected code from my work on turnout in tribal electio
 1. [Constitution Search App](./ConstitutionSearchApp.R)
   contains code for a shiny app I developed that allows a user to search the text of 97 tribal constitutions from *Measuring institutional variation across American Indian constitutions using automated content analysis* (2020). This tool allows for quick coding of a variety of tribal constitutional institutions including voting age, residency requirements, and blood quantum. However, there are many tribal constitutions now available online that are not included in this dataset.
 
-3. [Pre-processing](./Pre-Processing.Rmd) contains the code to process collected election results and merge tribal characteristics data with election results.
+3. [Pre-processing](./Pre-Processing.Rmd) contains the code to process collected election results and merge tribal characteristics with election results.
 
 4. [Displacement](./AddingDisplacement.Rmd) contains the code to calculate distances of displacement using data from Farrell et al. 2021.
 
