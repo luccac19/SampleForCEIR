@@ -1,0 +1,170 @@
+---
+title: "Pre-Processing"
+output: html_document
+---
+#Manipulating tribal characteristics dataset to to get averages of funding data over time.
+
+Funding data is provided by type by year. However, we want an average across 2016-2021 for each tribe. 
+
+```{r}
+#library packages
+library(tidyverse)
+library(stargazer)
+library(janitor)
+library(lubridate)
+
+#read in election data and tribal characteristics data
+electionresults<-read_csv("noextradetails.csv",col_types=cols(.default=col_character()))
+tribalcharacteristics<-read_csv("FinalFinalAnalysisDatasetwTRSAIP.csv")
+
+#fix typos in election data
+
+electionresults$`P1 Vote Vector`[electionresults$Timestamp=="2024/11/12 1:35:10 PM AST"]<-"447,264,278,146,1235,158,420,211"
+electionresults$`P1 Vote Vector`[electionresults$Timestamp=="2024/12/29 11:43:51 AM AST"]<-"909,1155"
+
+tribalcharacteristics$Enrollment_2016<-parse_number(tribalcharacteristics$Enrollment_2016)
+tribalcharacteristics$TRSAIP<-parse_number(tribalcharacteristics$TRSAIP)
+fundingtypes<-c("doi_","bia_","doiinfrastructure_","doiselfdetermination_","doieducation_","doiculture_","doiconservation_")
+
+for(i in 1:length(fundingtypes)){
+tribalcharacteristics <- tribalcharacteristics %>%
+  mutate(across(starts_with(fundingtypes[i]), 
+                list(~ . / as.numeric(get(gsub(fundingtypes[i], "Enrollment_", cur_column())))), 
+                .names = "{.col}_per_capita"))
+}
+
+#Loop over each funding type to calculate the per-year per-capita average from 2016 to 2021
+for (i in 1:length(fundingtypes)) {
+  tribalcharacteristics <- tribalcharacteristics %>%
+    mutate(!!paste0(fundingtypes[i], "avg_per_year") := 
+             rowSums(select(., starts_with(fundingtypes[i]) & ends_with("_per_capita"))) / 6)
+}
+
+```
+
+#Recoding Election Types so all elections are either coded as primary or general. 
+
+Typically tribes have either general and primary elections, general elections and runoff elections, or just general elections If a tribe only has one kind of election, an election with >2 candidates on the ballot should be coded as "general". However, if a tribe has both primaries and general elections, an election with >2 candidates should be coded as "primary" and an election with <=2 candidates should be coded as "general". 
+
+```{r}
+#create function to calculate the number of competitors listed in results of an election
+
+numofcomp<-function(column)
+{
+a<-c(0)
+for(i in 1:length(column)){
+vector<-ifelse(is.na(column[i]),0,str_split(column[i],","))
+vector<-as.numeric(as.vector(vector[[1]]))
+a[i]<-length(vector[vector>0])
+}
+return(a)
+}
+
+#apply this function to the election results 
+competitorsdataframe<-as.data.frame(sapply(electionresults[,grep("Vote Vector",names(electionresults))],numofcomp))
+
+#We want to determine if tribes have multiple kinds of elections. 
+
+tribedataframe<-data.frame(tribes=unique(electionresults$`Tribe Name`))
+tribedataframe <- data.frame(Tribe = unique(electionresults$`Tribe Name`), 
+                             multipleelectiontypes = rep(FALSE, times=(length(unique(electionresults$`Tribe Name`)))))
+
+#filter out special elections
+df<-electionresults[!(electionresults$`Election Type`=="Special"),]
+
+#check if there are multiple election types (primary and general)
+for(i in 1:length(unique(df$`Tribe Name`))) {
+  newdf <- df[df$`Tribe Name` == unique(df$`Tribe Name`)[i], ]
+    tribedataframe$multipleelectiontypes[i] <- length(unique(newdf$`Election Type`)) > 1
+}
+
+#filter for just tribes with multiple election types
+tribedataframe<-tribedataframe[tribedataframe$multipleelectiontypes==TRUE,]
+
+#recode their elections appropriately
+for(i in 1:length(electionresults$`Tribe Name`)){
+electionresults$`Election Type`[i]<-ifelse((electionresults$`Tribe Name`[i]%in%tribedataframe$Tribe)&(!(electionresults$`Election Type`[i])=="Special"),ifelse(max(unlist(competitorsdataframe[i,]))<=2,"General","Primary"),electionresults$`Election Type`[i])
+}
+```
+
+#Calculating vote totals for each election
+
+The dataframe of election results contains a vector of the votes each candidate received in each race on the ballot meeting the conditions for inclusion (at-large race with a single winner). 
+
+```{r}
+#define function to sum vectors
+vvsum<-function(column)
+{
+a<-c(0)
+for(i in 1:length(column)){
+vector<-ifelse(is.na(column[i]),0,str_split(column[i],","))
+vector<-as.numeric(as.vector(vector[[1]]))
+sum(vector)
+a[i]<-sum(vector)
+}
+return(a)
+}
+
+#apply the function to the election results
+electionresults[,grep("Vote Vector",names(electionresults))]<-as.data.frame(sapply(electionresults[,grep("Vote Vector",names(electionresults))],vvsum))
+
+#identify the race with the most votes cast for candidates listed on results (not write ins) in given election
+electionresults$maxvotes<-apply(electionresults[,grep("Vote Vector",names(electionresults))],1,max)
+electionresults<-electionresults[!is.na(electionresults$maxvotes==0)&!electionresults$maxvotes==0,]
+
+```
+
+#coding whether the tribal chair is on the ballot
+```{r}
+#lowercase position titles
+electionresults$`Position 1 Title`<-tolower(electionresults$`Position 1 Title`)
+
+#recode those elections with positions with keywords associated with chair and not vice chairs
+
+electionresults$chair<-ifelse(grepl("president|governor|chief|chair", electionresults$`Position 1 Title`),ifelse(grepl("vice|lieutenant|lt\\.", electionresults$`Position 1 Title`),0,1),0)
+electionresults$chair[c(24,25,50,51,219,221,222)]<-1
+```
+
+#clean election date for month and year and code elections concurrent with U.S. elections
+```{r}
+electionresults$`Election Date`<-mdy(electionresults$`Election Date`)
+electionresults$year<-year(electionresults$'Election Date')
+electionresults$month<-month(electionresults$'Election Date')
+electionresults$USelection<-ifelse((electionresults$month==11)&(electionresults$year%in%c(2016,2018,2020,2022,2024)),1,0)
+
+electionresults<-electionresults%>%select("Tribe Name","Election Type",maxvotes,chair,year,month,USelection) 
+```
+
+#Matching election results with tribal enrollment in election year and calculating turnout
+```{r}
+electionresults
+yearofinterestenrollment<-c()
+for(i in 1:length(electionresults$year)){
+  coltitle<-paste0("Enrollment_",as.character(electionresults$year[i]))
+      tribename <- electionresults$`Tribe Name`[i]
+  yearofinterestenrollment[i]<-as.numeric(tribalcharacteristics[tribalcharacteristics$TribeFullName == tribename,coltitle])
+}
+electionresults<-cbind(electionresults,yearofinterestenrollment)
+electionresults$turnout<-electionresults$maxvotes/electionresults$yearofinterestenrollment
+
+```
+
+#merging election results with relevant tribal characteristics
+
+```{r}
+othervariables<-tribalcharacteristics[,c(1,2,39,40,45,46,50,95,102,129,130,133,134,177:183)]
+electionresults<-left_join(electionresults,othervariables,join_by("Tribe Name"=="TribeFullName"))
+
+```
+
+#prepare dataset for statistical analysis with binary recodings and numeric parsing
+```{r}
+electionresults<-clean_names(electionresults)
+electionresults$blood_quantum<-as.numeric(electionresults$blood_quantum)
+electionresults$selfgovernance<-ifelse(is.na(electionresults$selfgovernance),0,electionresults$selfgovernance)
+electionresults$election_type<-ifelse(electionresults$election_type=="General",1,0)
+
+write_csv(electionresults,"CEIRsampleresults.csv")
+```
+
+
