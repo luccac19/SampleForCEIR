@@ -1,6 +1,6 @@
 # Sample Code
 ---
-This repository contains selected code from my work on turnout in tribal elections. It largely omits the code that was used to construct a dataframe of tribal characteristics, as all that was required was largely a series of joins and some manual data entry. Rather, it includes code for building apps to explore data quickly, processing collected election results, conducting statistical modeling, and creating some basic visualizations. 
+This repository contains selected code from my work on turnout in tribal elections. It largely omits the code that was used to construct a dataframe of tribal characteristics, as all that was required was largely a series of joins and some manual data entry. Rather, it includes code for building apps to explore data quickly, processing collected election results, and conducting statistical modeling. 
 
 ## 📁 Contents
 
